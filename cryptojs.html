@@ -1,0 +1,43 @@
+<script src="cryptojs.js"></script>
+<script>
+	function buf2hex(buffer) { // buffer is an ArrayBuffer
+  return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+}
+
+  Module.onRuntimeInitialized = _ => {
+    const apb = Module.cwrap('apb', 'number', ['number', 'number']);
+    console.log(apb(1, 2));
+    
+    console.log( Module.ccall('apb', 'number', ['number', 'number'], [1, 3]));
+    
+    var offset = Module._malloc(4);
+    Module.setValue(offset, 11, 'i32');
+    console.log( Module.ccall('appb', 'number', ['number', '*'], [1, offset]));
+    Module._free(offset);
+    
+    szRet = Module.ccall('sizeofRet', 'number', []);
+    var _ret = Module._malloc(szRet);
+    var _pk_A = Module._malloc(33);
+    var _pk_B = Module._malloc(33);    
+    var ret = new Uint8Array(_ret);
+    var pk_A = new Uint8Array(33);
+    var pk_B = new Uint8Array(33);
+    
+    pk_A.set([2,196,208,179,245,197,45,118,165,110,9,170,4,61,40,242,91,173,249,43,78,178,133,224,173,141,170,81,210,77,21,62,120]);
+    pk_B.set([3,196,208,179,245,197,45,118,165,110,9,170,4,61,40,242,91,173,249,43,78,178,133,224,173,141,170,81,210,77,21,62,120]);
+    Module.HEAPU8.set(pk_A, _pk_A);
+    Module.HEAPU8.set(pk_B, _pk_B);
+    var err = Module.ccall('build_confidential_tx', 'number', ['*', '*', '*', 'number', 'number','number','number', 'number'], [_ret, _pk_A, _pk_B, 123, 0, 130, 0, 1]);
+    ret.set(HEAPU8.subarray(_ret, _ret + szRet));
+    
+    console.log(err);
+    console.log(buf2hex(pk_A.buffer))
+    console.log(buf2hex(ret.buffer))
+    Module._free(_ret);
+    Module._free(_pk_A);
+    Module._free(_pk_B);
+    
+    //console.log(Module.ccall('vvv', 'number', ['number', 'number'], [456, 123]));
+  };
+</script>
+
