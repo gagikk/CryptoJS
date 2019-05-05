@@ -225,29 +225,3 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     return (0 == ok);
 }
 
-//int main(int argc, char **argv)
-//{
-//    std::string A_p(argv[1]), B_p(argv[2]);
-//    uint64_t value = std::stoul(argv[3]), asset = std::stoul(argv[4]);
-
-//    int generate_range_proof = std::stoi(argv[4]);
-
-//    R result;
-
-//    build_confidential_tx( result, A_p, B_p, value, asset, generate_range_proof);
-
-//    CryptoPP::HexEncoder encoder;
-//    encoder.Put((unsigned char*)&result, sizeof(result));
-//    encoder.MessageEnd();
-//    std::string encoded;
-//    size_t size = encoder.MaxRetrievable();
-////    if(size)
-////    {
-////        encoded.resize(size);
-////    encoder.Get((byte*)&encoded[0], encoded.size());
-////    }
-
-////    cout << encoded << endl;
-//    return 0;
-//}
-
