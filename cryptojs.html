@@ -1,19 +1,10 @@
-<script src="cryptojs.js"></script>
+<script src="build/cryptojs.js"></script>
 <script>
 	function buf2hex(buffer) { // buffer is an ArrayBuffer
   return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
 }
 
   Module.onRuntimeInitialized = _ => {
-    const apb = Module.cwrap('apb', 'number', ['number', 'number']);
-    console.log(apb(1, 2));
-    
-    console.log( Module.ccall('apb', 'number', ['number', 'number'], [1, 3]));
-    
-    var offset = Module._malloc(4);
-    Module.setValue(offset, 11, 'i32');
-    console.log( Module.ccall('appb', 'number', ['number', '*'], [1, offset]));
-    Module._free(offset);
     
     szRet = Module.ccall('sizeofRet', 'number', []);
     var _ret = Module._malloc(szRet);
@@ -31,13 +22,14 @@
     ret.set(HEAPU8.subarray(_ret, _ret + szRet));
     
     console.log(err);
-    console.log(buf2hex(pk_A.buffer))
-    console.log(buf2hex(ret.buffer))
+    console.log(szRet);
+    console.log(buf2hex(pk_A.buffer));
+    console.log(buf2hex(pk_B.buffer));
+    console.log(buf2hex(ret.buffer));
     Module._free(_ret);
     Module._free(_pk_A);
     Module._free(_pk_B);
     
-    //console.log(Module.ccall('vvv', 'number', ['number', 'number'], [456, 123]));
   };
 </script>
 

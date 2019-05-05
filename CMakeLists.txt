@@ -64,7 +64,7 @@ if(JS)
     add_executable(cryptojs "main.cpp")
     set(CMAKE_EXECUTABLE_SUFFIX ".js")
     # -s MODULARIZE=1 -s EXPORT_NAME='CryptoJS'
-    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "-O3 -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _apb, _appb, _sizeofRet]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
+    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "-O3 -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
 else(JS)
     add_library(cryptojs "main.cpp")
 endif(JS)

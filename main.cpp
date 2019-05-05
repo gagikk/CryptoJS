@@ -135,8 +135,6 @@ struct __attribute__((__packed__)) Ret
 
 extern "C" {
 int __attribute__((used)) build_confidential_tx ( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
-int __attribute__((used)) apb( int a, int b) { return a + b; }
-int __attribute__((used)) appb( int a, int* b) { return a + *b; }
 int __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
 }
 
