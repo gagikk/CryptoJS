@@ -1,0 +1,9 @@
+[submodule "secp256k1-zkp"]
+	path = secp256k1-zkp
+	url = https://github.com/ElementsProject/secp256k1-zkp.git
+[submodule "cryptopp"]
+	path = cryptopp
+	url = https://github.com/weidai11/cryptopp.git
+[submodule "cryptopp-cmake"]
+	path = cryptopp-cmake
+	url = https://github.com/noloader/cryptopp-cmake.git
