@@ -73,7 +73,7 @@ int generate_shared_secret( shared_secret_t shared_secret, secp256k1_pubkey pk, 
 }
 
 static
-int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t value )
+int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t value)
 {
     int ok = 1;
     secp256k1_pedersen_commitment _commit;
@@ -83,11 +83,11 @@ int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t value 
 }
 
 static
-int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t blind_tweak, uint64_t value )
+int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t blind_tweak, uint64_t value)
 {
-    if( !blind_tweak )
-        return 0;
     int ok = 1;
+    if(!blind_tweak)
+        return 0;
 
     blind_factor_t blind_tweak_;
     memset( blind_tweak_, 0, sizeof(blind_tweak_));
@@ -128,14 +128,14 @@ struct __attribute__((__packed__)) Ret
     public_key_t P;
     blind_factor_t B;
     commitment_t C;
-    CryptoPP::byte ED[CryptoPP::AES::BLOCKSIZE];
+    CryptoPP::byte E[CryptoPP::AES::BLOCKSIZE];
     size_t proof_len;
     unsigned char commitment_range_proof[PROOF_SZ];
 };
 
 extern "C" {
-int __attribute__((used)) build_confidential_tx ( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
-int __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
+int __attribute__((used)) build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
+uint32_t __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
 }
 
 
@@ -143,7 +143,7 @@ int __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
 int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof)
 {
     int ok = 1;
-    memset(ret, 0, sizeofRet());
+    memset( ret, 0, sizeofRet());
 
     if(!asset)
         return 1;
@@ -166,7 +166,7 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     sha256.CalculateDigest( nonce, tx_key_s, SK_SZ);
 
 
-    ok &= secp256k1_ec_pubkey_parse(ctx, &_A_p, A_p, sizeof(public_key_t));
+    ok &= secp256k1_ec_pubkey_parse( ctx, &_A_p, A_p, sizeof(public_key_t));
     shared_secret_t shared_secret_a;
     ok &= generate_shared_secret( shared_secret_a, _A_p, tx_key_s);
 
@@ -181,7 +181,7 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     ok &= secp256k1_ec_pubkey_tweak_add( ctx, &_P_p, addr_blind);
     ok &= secp256k1_ec_pubkey_serialize( ctx, P_p, &sz, &_P_p, SECP256K1_EC_COMPRESSED);
 
-    ok &= secp256k1_ec_pubkey_parse(ctx, &_B_p, B_p, sizeof(public_key_t));
+    ok &= secp256k1_ec_pubkey_parse( ctx, &_B_p, B_p, sizeof(public_key_t));
     shared_secret_t shared_secret_b;
     ok &= generate_shared_secret( shared_secret_b, _B_p, tx_key_s);
 
@@ -206,16 +206,14 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     unsigned char commitment_range_proof[PROOF_SZ];
     memset( commitment_range_proof, 0, PROOF_SZ);
     if(generate_range_proof)
-    {
         ok &= range_proof_sign( commitment_range_proof, &proof_len, 0, commitment, amount_blind, nonce, 0, 0, value);
-    }
 
     Ret result;
     memcpy( &result.T, tx_key_p, sizeof(public_key_t));
     memcpy( &result.P, P_p, sizeof(public_key_t));
     memcpy( &result.B, amount_blind, sizeof(blind_factor_t));
     memcpy( &result.C, commitment, sizeof(commitment_t));
-    memcpy( &result.ED, encrypted_data, sizeof(encrypted_data));
+    memcpy( &result.E, encrypted_data, sizeof(encrypted_data));
     result.proof_len = proof_len;
     memcpy( &result.commitment_range_proof, commitment_range_proof, proof_len);
 
