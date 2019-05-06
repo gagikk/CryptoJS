@@ -42,11 +42,17 @@ ExternalProject_Add( project_cryptopp
     BUILD_BYPRODUCTS <BINARY_DIR>/libcryptopp.a
     )
 
-ExternalProject_Add_Step(project_cryptopp merge_cryptopp_cmake
+ExternalProject_Add_Step(project_cryptopp cp_cryptopp_cmake
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cryptopp
     COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/cryptopp-cmake/CMakeLists.txt . && cp ${CMAKE_CURRENT_SOURCE_DIR}/cryptopp-cmake/cryptopp-config.cmake .
     DEPENDERS configure
     )
+
+#ExternalProject_Add_Step(project_cryptopp rm_cryptopp_cmake
+#    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cryptopp
+#    COMMAND rm CMakeLists.txt && rm cryptopp-config.cmake && rm -rf cryptopp-cmake
+#    DEPENDEES install
+#    )
 
 ExternalProject_Get_Property(project_cryptopp INSTALL_DIR)
 ExternalProject_Get_Property(project_cryptopp SOURCE_DIR)
@@ -64,7 +70,7 @@ if(JS)
     add_executable(cryptojs "main.cpp")
     set(CMAKE_EXECUTABLE_SUFFIX ".js")
     # -s MODULARIZE=1 -s EXPORT_NAME='CryptoJS'
-    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "-O3 -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
+    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "-O3 -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet, _blinding_sum, _sha256, _aes_decrypt, _generate_shared_secret]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
 else(JS)
     add_library(cryptojs "main.cpp")
 endif(JS)
