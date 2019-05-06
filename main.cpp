@@ -55,8 +55,8 @@ using commitment_t = unsigned char [PK_SZ];
 using shared_secret_t = unsigned char[CryptoPP::SHA512::DIGESTSIZE];
 
 static secp256k1_context* ctx = secp256k1_context_create( SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN );
-static CryptoPP::SHA512 sha512;
-static CryptoPP::SHA256 sha256;
+static CryptoPP::SHA512 _sha512;
+static CryptoPP::SHA256 _sha256;
 
 
 struct __attribute__((__packed__)) Ret
@@ -73,12 +73,12 @@ struct __attribute__((__packed__)) Ret
 extern "C" {
 int __attribute__((used)) build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
 uint32_t __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
-int __attribute__((used))  blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count);
+int __attribute__((used)) blinding_sum( blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count);
+void __attribute__((used)) sha256( unsigned char ret[32], unsigned char * data, uint32_t sz);
+void __attribute__((used)) aes_decrypt( CryptoPP::byte * plain_data, CryptoPP::byte * encrypted_data, uint32_t sz, shared_secret_t shared_secret_b);
+int __attribute__((used)) generate_shared_secret( shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk);
 }
 
-
-
-static
 int generate_shared_secret( shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk)
 {
     int ok = 1;
@@ -87,9 +87,21 @@ int generate_shared_secret( shared_secret_t shared_secret, secp256k1_pubkey pk, 
     ok &= secp256k1_ec_pubkey_tweak_mul( ctx, &pk, sk);
     ok &= secp256k1_ec_pubkey_serialize( ctx, _pk, &sz, &pk, SECP256K1_EC_COMPRESSED);
 
-    sha512.CalculateDigest( shared_secret, &_pk[1], PK_SZ - 1);
+    _sha512.CalculateDigest( shared_secret, &_pk[1], PK_SZ - 1);
 
     return ok;
+}
+
+void sha256( unsigned char ret[32], unsigned char * data, uint32_t sz)
+{
+    _sha256.CalculateDigest( ret, data, sz);
+}
+
+void aes_decrypt( CryptoPP::byte * plain_data, CryptoPP::byte * encrypted_data, uint32_t sz, shared_secret_t shared_secret_b)
+{
+    CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption aes;
+    aes.SetKeyWithIV( shared_secret_b, 32, &shared_secret_b[32]);
+    aes.ProcessData( plain_data, encrypted_data, sz);
 }
 
 static
@@ -176,7 +188,7 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     ok &= secp256k1_ec_pubkey_serialize( ctx, tx_key_p, &sz, &_tx_key_p, SECP256K1_EC_COMPRESSED);
 
     CryptoPP::byte nonce[ CryptoPP::SHA256::DIGESTSIZE ];
-    sha256.CalculateDigest( nonce, tx_key_s, SK_SZ);
+    _sha256.CalculateDigest( nonce, tx_key_s, SK_SZ);
 
 
     ok &= secp256k1_ec_pubkey_parse( ctx, &_A_p, A_p, sizeof(public_key_t));
@@ -185,7 +197,7 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
 
 
     blind_factor_t addr_blind;
-    sha256.CalculateDigest( addr_blind, shared_secret_a, sizeof (shared_secret_a));
+    _sha256.CalculateDigest( addr_blind, shared_secret_a, sizeof (shared_secret_a));
 
     secp256k1_pubkey _P_p;
     public_key_t P_p;
@@ -209,7 +221,7 @@ int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B
     aes.ProcessData( encrypted_data, plain_data, sizeof (plain_data));
 
     blind_factor_t amount_blind;
-    sha256.CalculateDigest( amount_blind, shared_secret_b, sizeof (shared_secret_b));
+    _sha256.CalculateDigest( amount_blind, shared_secret_b, sizeof (shared_secret_b));
 
 
     commitment_t commitment;
