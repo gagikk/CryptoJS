@@ -58,6 +58,26 @@ static secp256k1_context* ctx = secp256k1_context_create( SECP256K1_CONTEXT_VERI
 static CryptoPP::SHA512 sha512;
 static CryptoPP::SHA256 sha256;
 
+
+struct __attribute__((__packed__)) Ret
+{
+    public_key_t T;
+    public_key_t P;
+    blind_factor_t B;
+    commitment_t C;
+    CryptoPP::byte E[CryptoPP::AES::BLOCKSIZE];
+    size_t proof_len;
+    unsigned char commitment_range_proof[PROOF_SZ];
+};
+
+extern "C" {
+int __attribute__((used)) build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
+uint32_t __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
+int __attribute__((used))  blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count);
+}
+
+
+
 static
 int generate_shared_secret( shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk)
 {
@@ -99,6 +119,17 @@ int blind( commitment_t commitment, blind_factor_t blind_factor, uint64_t blind_
     return ok;
 }
 
+int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count)
+{
+    int ok = 1;
+
+    unsigned char * p_blinding_factors[count]; // using VLA, so we limit the count to max 255
+    for( uint8_t i = 0; i < count; ++i)
+        p_blinding_factors[i] = &blinding_factors[i];
+    ok &= secp256k1_pedersen_blind_sum( ctx, ret, p_blinding_factors, count, non_neg_count);
+
+    return  ok;
+}
 
 static
 int range_proof_sign( unsigned char proof[PROOF_SZ], size_t* proof_len, uint64_t min_value, commitment_t commit, const blind_factor_t commit_blind,  const blind_factor_t nonce, int8_t base10_exp, uint8_t min_bits, uint64_t actual_value)
@@ -120,24 +151,6 @@ int range_proof_sign( unsigned char proof[PROOF_SZ], size_t* proof_len, uint64_t
                                      secp256k1_generator_h);
     return ok;
 }
-
-
-struct __attribute__((__packed__)) Ret
-{
-    public_key_t T;
-    public_key_t P;
-    blind_factor_t B;
-    commitment_t C;
-    CryptoPP::byte E[CryptoPP::AES::BLOCKSIZE];
-    size_t proof_len;
-    unsigned char commitment_range_proof[PROOF_SZ];
-};
-
-extern "C" {
-int __attribute__((used)) build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
-uint32_t __attribute__((used, const)) sizeofRet() { return sizeof(Ret); }
-}
-
 
 
 int build_confidential_tx( unsigned char * ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof)
