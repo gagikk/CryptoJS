@@ -77,7 +77,7 @@ extern "C"
 {
     int __attribute__((used)) build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
     uint32_t __attribute__((used, const)) sizeofRet( ) { return sizeof(Ret); }
-    int __attribute__((used)) blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count);
+    int __attribute__((used)) blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count);
     void __attribute__((used)) sha256(unsigned char ret[32], unsigned char *data, uint32_t sz);
     void __attribute__((used)) aes_decrypt(CryptoPP::byte *plain_data, CryptoPP::byte *encrypted_data, uint32_t sz, shared_secret_t shared_secret_b);
     int __attribute__((used)) generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk);
@@ -108,7 +108,7 @@ void aes_decrypt(CryptoPP::byte *plain_data, CryptoPP::byte *encrypted_data, uin
     aes.ProcessData(plain_data, encrypted_data, sz);
 }
 
-static int blind(commitment_t commitment, blind_factor_t blind_factor, uint64_t value)
+static int blind(commitment_t commitment, blind_factor_t const blind_factor, uint64_t const value)
 {
     int                           ok = 1;
     secp256k1_pedersen_commitment _commit;
@@ -117,29 +117,30 @@ static int blind(commitment_t commitment, blind_factor_t blind_factor, uint64_t 
     return ok;
 }
 
-static int blind(commitment_t commitment, blind_factor_t blind_factor, uint64_t blind_tweak, uint64_t value)
+static int blind(commitment_t commitment, blind_factor_t const blind_factor, uint64_t const blind_tweak, uint64_t const value)
 {
     int ok = 1;
     if(!blind_tweak)
         return 0;
 
-    blind_factor_t blind_tweak_;
-    memset(blind_tweak_, 0, sizeof(blind_tweak_));
-    memcpy(blind_tweak_, &blind_tweak, sizeof(blind_tweak));
+    blind_factor_t _blind_tweak, _blind_factor_tweaked;
+    memset(_blind_tweak, 0, sizeof(_blind_tweak));
+    memcpy(_blind_tweak, &blind_tweak, sizeof(blind_tweak));
 
-    ok &= secp256k1_ec_privkey_tweak_mul(ctx, blind_factor, blind_tweak_);
-    ok &= blind(commitment, blind_factor, value);
+    memcpy(_blind_factor_tweaked, blind_factor, sizeof(_blind_factor_tweaked));
+    ok &= secp256k1_ec_privkey_tweak_mul(ctx, _blind_factor_tweaked, _blind_tweak);
+    ok &= blind(commitment, _blind_factor_tweaked, value);
 
     return ok;
 }
 
-int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors, uint8_t count, uint8_t non_neg_count)
+int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count)
 {
     int ok = 1;
 
     unsigned char *p_blinding_factors[count]; // using VLA, so we limit the count to max 255
     for(uint8_t i = 0; i < count; ++i)
-        p_blinding_factors[i] = &blinding_factors[i];
+        p_blinding_factors[i] = blinding_factors[i];
     ok &= secp256k1_pedersen_blind_sum(ctx, ret, p_blinding_factors, count, non_neg_count);
 
     return ok;
@@ -217,7 +218,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
 
     CryptoPP::byte encrypted_data[CryptoPP::AES::BLOCKSIZE];
     CryptoPP::byte plain_data[CryptoPP::AES::BLOCKSIZE];
-    memset(plain_data, 0, sizeof(plain_data));
+    memset(plain_data, CryptoPP::AES::BLOCKSIZE - sizeof(value), sizeof(plain_data));
     memcpy(plain_data, &value, sizeof(value));
     aes.ProcessData(encrypted_data, plain_data, sizeof(plain_data));
 
