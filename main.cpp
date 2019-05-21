@@ -41,20 +41,20 @@ static auto build_confidential_tx = [](const string &A_, const string &B_, asset
     optional<vector<char>> commitment_range_proof;
     if(generate_range_proof)
         commitment_range_proof = fc::ecc::range_proof_sign( 0, commitment, blind_factor, nonce,  0, 0, val.amount.value);
-    return make_tuple(T_, P_, blind_factor, commitment, data, commitment_range_proof);
+    return make_tuple(T_, P_, blind_factor, commitment, data, commitment_range_proof, tx_key_s);
 };
 */
 
 #define SK_SZ 32
 #define PK_SZ 33
+#define SIG_SZ 64
 #define PROOF_SZ 5134
 
-using blind_factor_t = unsigned char[SK_SZ];
-using private_key_t  = unsigned char[SK_SZ];
-
-using public_key_t = unsigned char[PK_SZ];
-using commitment_t = unsigned char[PK_SZ];
-
+using blind_factor_t  = unsigned char[SK_SZ];
+using private_key_t   = unsigned char[SK_SZ];
+using signature_t     = unsigned char[SIG_SZ];
+using public_key_t    = unsigned char[PK_SZ];
+using commitment_t    = unsigned char[PK_SZ];
 using shared_secret_t = unsigned char[CryptoPP::SHA512::DIGESTSIZE];
 
 static secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN);
@@ -69,6 +69,7 @@ struct __attribute__((__packed__)) Ret
     blind_factor_t B;
     commitment_t   C;
     CryptoPP::byte E[CryptoPP::AES::BLOCKSIZE];
+    signature_t    S;
     size_t         proof_len;
     unsigned char  commitment_range_proof[PROOF_SZ];
 };
@@ -175,8 +176,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     if(!asset)
         return 1;
 
-    secp256k1_pubkey _tx_key_p, _A_p, _B_p;
-
+    secp256k1_pubkey               _tx_key_p, _A_p, _B_p;
     CryptoPP::AutoSeededRandomPool rng;
 
     size_t sz = PK_SZ;
@@ -241,8 +241,16 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     memcpy(&result.B, amount_blind, sizeof(blind_factor_t));
     memcpy(&result.C, commitment, sizeof(commitment_t));
     memcpy(&result.E, encrypted_data, sizeof(encrypted_data));
+    memset(&result.S, 0, sizeof(signature_t));
     result.proof_len = proof_len;
     memcpy(&result.commitment_range_proof, commitment_range_proof, proof_len);
+
+    unsigned char result_sha256[32];
+    _sha256.CalculateDigest(result_sha256, (unsigned char *) &result, sizeof(Ret));
+
+    secp256k1_ecdsa_signature sig;
+    secp256k1_ecdsa_sign(ctx, &sig, result_sha256, tx_key_s, nullptr, nullptr);
+    secp256k1_ecdsa_signature_serialize_compact(ctx, (unsigned char *) &result.S, &sig);
 
     memcpy(ret, &result, sizeof(Ret));
     return (0 == ok);
