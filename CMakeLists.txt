@@ -68,11 +68,23 @@ add_dependencies(cryptopp project_cryptopp)
 
 if(JS)
     add_executable(cryptojs "main.cpp")
-    set(CMAKE_EXECUTABLE_SUFFIX ".js")
     # -s MODULARIZE=1 -s EXPORT_NAME='CryptoJS'
-    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "-O3 -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet, _blinding_sum, _sha256, _aes_decrypt, _generate_shared_secret]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
+    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "--bind -O3 -s ENVIRONMENT=web -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet, _blinding_sum, _sha256, _aes_decrypt, _generate_shared_secret]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
+    set_target_properties(
+        cryptojs
+        PROPERTIES
+            SUFFIX ".js"
+    )
+
+    add_executable(tb "test_bench.cpp")
+    set_target_properties(tb PROPERTIES LINK_FLAGS "--bind -O1 -s ENVIRONMENT=web -s WASM=1 -s BINARYEN_METHOD='native-wasm'")
+    set_target_properties(
+        tb
+        PROPERTIES
+            SUFFIX ".html"
+    )
 else(JS)
-    add_library(cryptojs "main.cpp")
+    add_executable(cryptojs "main.cpp")
 endif(JS)
 
 target_include_directories(cryptojs PUBLIC secp256k1 cryptopp)
