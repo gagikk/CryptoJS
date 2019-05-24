@@ -190,7 +190,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     ok &= secp256k1_ec_pubkey_serialize(ctx, tx_key_p, &sz, &_tx_key_p, SECP256K1_EC_COMPRESSED);
 
     CryptoPP::byte nonce[CryptoPP::SHA256::DIGESTSIZE];
-    _sha256.CalculateDigest(nonce, tx_key_s, SK_SZ);
+    sha256(nonce, tx_key_s, SK_SZ);
 
 
     ok &= secp256k1_ec_pubkey_parse(ctx, &_A_p, A_p, sizeof(public_key_t));
@@ -199,7 +199,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
 
 
     blind_factor_t addr_blind;
-    _sha256.CalculateDigest(addr_blind, shared_secret_a, sizeof(shared_secret_a));
+    sha256(addr_blind, shared_secret_a, sizeof(shared_secret_a));
 
     secp256k1_pubkey _P_p;
     public_key_t     P_p;
@@ -223,7 +223,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     aes.ProcessData(encrypted_data, plain_data, sizeof(plain_data));
 
     blind_factor_t amount_blind;
-    _sha256.CalculateDigest(amount_blind, shared_secret_b, sizeof(shared_secret_b));
+    sha256(amount_blind, shared_secret_b, sizeof(shared_secret_b));
 
 
     commitment_t commitment;
@@ -246,7 +246,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     memcpy(&result.commitment_range_proof, commitment_range_proof, proof_len);
 
     unsigned char result_sha256[32];
-    _sha256.CalculateDigest(result_sha256, (unsigned char *) &result, sizeof(Ret));
+    sha256(result_sha256, (unsigned char *) &result, sizeof(Ret));
 
     secp256k1_ecdsa_signature sig;
     secp256k1_ecdsa_sign(ctx, &sig, result_sha256, tx_key_s, nullptr, nullptr);
