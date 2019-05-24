@@ -451,7 +451,10 @@ confidential_tx transfer_from_confidential(
         auto to_address               = from_hex(x_to_address);
         beneficiary.confidential_addr = to_address.size( ) > sizeof(public_key_t);
         memcpy(&beneficiary.A, to_address.data( ), sizeof(public_key_t));
-        memcpy(&beneficiary.B, to_address.data( ) + sizeof(public_key_t), sizeof(public_key_t));
+        if(beneficiary.confidential_addr)
+            memcpy(&beneficiary.B, to_address.data( ) + sizeof(public_key_t), sizeof(public_key_t));
+        else
+            memset(&beneficiary.B, 0, sizeof(public_key_t));
         beneficiary.amount = to_amount;
         beneficiaries.push_back(beneficiary);
     }
