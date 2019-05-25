@@ -153,13 +153,13 @@ static int blind(commitment_t commitment, blind_factor_t const blind_factor, uin
 
 int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count)
 {
-    int ok = 1;
-
+    int            ok = 1;
     unsigned char *p_blinding_factors[count]; // using VLA, so we limit the count to max 255
-    for(uint8_t i = 0; i < count; ++i)
-        p_blinding_factors[i] = blinding_factors[i];
-    ok &= secp256k1_pedersen_blind_sum(ctx, ret, p_blinding_factors, count, non_neg_count);
 
+    for(uint8_t i = 0; i < count; ++i)
+        p_blinding_factors[i] = (unsigned char *) &blinding_factors[i];
+
+    ok &= secp256k1_pedersen_blind_sum(ctx, ret, p_blinding_factors, count, non_neg_count);
     return ok;
 }
 
@@ -460,9 +460,9 @@ confidential_tx transfer_from_confidential(
     }
 
 
-    auto     nn     = blinding_factors.size( );
-    auto     ct_n   = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](out const &addr) { return addr.confidential_addr; });
-    uint64_t symbol = xstr_to_u64(fee.symbol);
+    auto     inputs_blinds_n = blinding_factors.size( );
+    auto     ct_n            = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](out const &addr) { return addr.confidential_addr; });
+    uint64_t symbol          = xstr_to_u64(fee.symbol);
 
     for(auto item : beneficiaries)
     {
@@ -492,7 +492,7 @@ confidential_tx transfer_from_confidential(
     });
 
     blind_factor_ blind;
-    ok &= blinding_sum(blind.data, (blind_factor_t *) blinding_factors.data( ), blinding_factors.size( ), nn);
+    ok &= blinding_sum(blind.data, (blind_factor_t *) blinding_factors.data( ), blinding_factors.size( ), inputs_blinds_n);
 
 
     result.blinding_factor = to_hex(blind.data);
