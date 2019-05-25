@@ -315,8 +315,8 @@ std::string to_hex(T const (&data)[N])
 template<typename T>
 std::string to_hex(T const &data)
 {
-    std::array<uint8_t, sizeof(T)> _data;
-    memcpy(_data.data( ), &data, _data.size( ));
+    uint8_t _data[sizeof(T)];
+    memcpy(_data, &data, sizeof(T));
     return to_hex(_data);
 }
 
@@ -396,7 +396,7 @@ confidential_tx transfer_from_confidential(
         return pk;
     };
 
-    std::vector<blind_factor_> blinding_factors_in;
+    std::vector<blind_factor_> blinding_factors;
 
     std::vector<out> beneficiaries;
     uint64_t         total_amount_in = 0;
@@ -410,7 +410,7 @@ confidential_tx transfer_from_confidential(
         blind_factor_ blind_factor_b;
         sha256(blind_factor_b.data, shared_secret_b, sizeof(shared_secret_b));
 
-        blinding_factors_in.push_back(blind_factor_b);
+        blinding_factors.push_back(blind_factor_b);
 
         shared_secret_t shared_secret_a;
         ok &= generate_shared_secret(shared_secret_a, to_pubkey(in.owner), owner_private_a.data);
@@ -460,7 +460,7 @@ confidential_tx transfer_from_confidential(
     }
 
 
-    auto     nn     = blinding_factors_in.size( );
+    auto     nn     = blinding_factors.size( );
     auto     ct_n   = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](out const &addr) { return addr.confidential_addr; });
     uint64_t symbol = xstr_to_u64(fee.symbol);
 
@@ -476,7 +476,7 @@ confidential_tx transfer_from_confidential(
             result.confidential.push_back(x_ret);
             blind_factor_ b;
             memcpy(b.data, ret.B, sizeof(b));
-            blinding_factors_in.push_back(b);
+            blinding_factors.push_back(b);
         }
         else
         {
@@ -492,7 +492,7 @@ confidential_tx transfer_from_confidential(
     });
 
     blind_factor_ blind;
-    ok &= blinding_sum(blind.data, (blind_factor_t *) blinding_factors_in.data( ), blinding_factors_in.size( ), nn);
+    ok &= blinding_sum(blind.data, (blind_factor_t *) blinding_factors.data( ), blinding_factors.size( ), nn);
 
 
     result.blinding_factor = to_hex(blind.data);
