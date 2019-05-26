@@ -16,35 +16,6 @@ namespace CryptoPP
 #include <cryptopp/osrng.h>
 #include <cryptopp/sha.h>
 
-#include <array>
-
-/*
-static auto build_confidential_tx = [](const string &A_, const string &B_, asset val, bool generate_range_proof)
-{
-    auto tx_key_s = fc::ecc::private_key::generate();
-    auto tx_key_p = tx_key_s.get_public_key();
-    auto T_ = public_key_type(tx_key_p);
-    fc::ecc::public_key A = public_key_type(A_);
-    fc::ecc::public_key B = public_key_type(B_);
-
-    auto nonce = fc::sha256::hash(tx_key_s.get_secret());
-    auto addr_blind = fc::sha256::hash(tx_key_s.get_shared_secret(A));
-    auto P = B.add(addr_blind);
-    auto P_ = public_key_type(P);
-
-    auto shared_secret = tx_key_s.get_shared_secret(B);
-    auto blind_factor = fc::sha256::hash(shared_secret);
-
-    auto data = fc::aes_encrypt(shared_secret, fc::raw::pack(val.amount.value));
-    auto commitment = fc::ecc::blind( blind_factor, uint64_t(val.asset_id), val.amount.value);
-
-    optional<vector<char>> commitment_range_proof;
-    if(generate_range_proof)
-        commitment_range_proof = fc::ecc::range_proof_sign( 0, commitment, blind_factor, nonce,  0, 0, val.amount.value);
-    return make_tuple(T_, P_, blind_factor, commitment, data, commitment_range_proof, tx_key_s);
-};
-*/
-
 #define SK_SZ 32
 #define PK_SZ 33
 #define SIG_SZ 64
@@ -78,7 +49,7 @@ static CryptoPP::SHA512   _sha512;
 static CryptoPP::SHA256   _sha256;
 
 
-struct __attribute__((__packed__)) Ret
+struct __attribute__((__packed__)) _Confidential
 {
     public_key_t   T;
     public_key_t   P;
@@ -90,17 +61,7 @@ struct __attribute__((__packed__)) Ret
     unsigned char  commitment_range_proof[PROOF_SZ];
 };
 
-extern "C"
-{
-    int __attribute__((used)) build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof);
-    uint32_t __attribute__((used, const)) sizeofRet( ) { return sizeof(Ret); }
-    int __attribute__((used)) blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count);
-    void __attribute__((used)) sha256(unsigned char ret[32], unsigned char *data, uint32_t sz);
-    void __attribute__((used)) aes_decrypt(CryptoPP::byte *plain_data, CryptoPP::byte *encrypted_data, uint32_t sz, shared_secret_t shared_secret_b);
-    int __attribute__((used)) generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk);
-}
-
-int generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk)
+static int generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk)
 {
     int          ok = 1;
     size_t       sz = PK_SZ;
@@ -113,12 +74,12 @@ int generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, p
     return ok;
 }
 
-void sha256(unsigned char ret[32], unsigned char *data, uint32_t sz)
+static void sha256(unsigned char ret[32], unsigned char *data, uint32_t sz)
 {
     _sha256.CalculateDigest(ret, data, sz);
 }
 
-void aes_decrypt(CryptoPP::byte *plain_data, CryptoPP::byte *encrypted_data, uint32_t sz, shared_secret_t shared_secret_b)
+static void aes_decrypt(CryptoPP::byte *plain_data, CryptoPP::byte *encrypted_data, uint32_t sz, shared_secret_t shared_secret_b)
 {
     CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption aes;
     aes.SetKeyWithIV(shared_secret_b, 32, &shared_secret_b[32]);
@@ -151,7 +112,7 @@ static int blind(commitment_t commitment, blind_factor_t const blind_factor, uin
     return ok;
 }
 
-int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count)
+static int blinding_sum(blind_factor_t ret, blind_factor_t blinding_factors[], uint8_t count, uint8_t non_neg_count)
 {
     int            ok = 1;
     unsigned char *p_blinding_factors[count]; // using VLA, so we limit the count to max 255
@@ -184,10 +145,10 @@ static int range_proof_sign(unsigned char proof[PROOF_SZ], size_t *proof_len, ui
 }
 
 
-int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof)
+static int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p, uint64_t value, uint64_t asset, int generate_range_proof)
 {
     int ok = 1;
-    memset(ret, 0, sizeofRet( ));
+    memset(ret, 0, sizeof(_Confidential));
 
     if(!asset)
         return 1;
@@ -251,7 +212,7 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     if(generate_range_proof)
         ok &= range_proof_sign(commitment_range_proof, &proof_len, 0, commitment, amount_blind, nonce, 0, 0, value);
 
-    Ret result;
+    _Confidential result;
     memcpy(&result.T, tx_key_p, sizeof(public_key_t));
     memcpy(&result.P, P_p, sizeof(public_key_t));
     memcpy(&result.B, amount_blind, sizeof(blind_factor_t));
@@ -262,13 +223,13 @@ int build_confidential_tx(unsigned char *ret, public_key_t A_p, public_key_t B_p
     memcpy(&result.commitment_range_proof, commitment_range_proof, proof_len);
 
     unsigned char result_sha256[32];
-    sha256(result_sha256, (unsigned char *) &result, sizeof(Ret));
+    sha256(result_sha256, (unsigned char *) &result, sizeof(_Confidential));
 
     secp256k1_ecdsa_signature sig;
     secp256k1_ecdsa_sign(ctx, &sig, result_sha256, tx_key_s, nullptr, nullptr);
     secp256k1_ecdsa_signature_serialize_compact(ctx, (unsigned char *) &result.S, &sig);
 
-    memcpy(ret, &result, sizeof(Ret));
+    memcpy(ret, &result, sizeof(_Confidential));
     return (0 == ok);
 }
 
@@ -305,7 +266,7 @@ std::string to_hex(T const (&data)[N])
     size_t size = _xenc.MaxRetrievable( );
     if(size)
     {
-        std::string result(size, '\x00');
+        std::string result(size, '\0');
         _xenc.Get((CryptoPP::byte *) result.data( ), size);
         return result;
     }
@@ -320,7 +281,7 @@ std::string to_hex(T const &data)
     return to_hex(_data);
 }
 
-struct out
+struct Beneficiary
 {
     bool        confidential_addr;
     public_key_ A;
@@ -328,7 +289,7 @@ struct out
     uint64_t    amount;
 };
 
-struct op_fee
+struct Fee
 {
     std::string base_fee;
     std::string per_out;
@@ -336,7 +297,7 @@ struct op_fee
 };
 
 
-struct xRet
+struct Confidential
 {
     std::string tx_key;
     std::string owner;
@@ -347,43 +308,60 @@ struct xRet
     std::string range_proof;
 };
 
-struct xOpen
+struct Open
 {
-    std::string owner;
+    std::string pk;
     std::string amount;
 };
 
-struct confidential_tx
+struct TX
 {
-    std::vector<xRet>        confidential;
-    std::vector<xOpen>       open;
-    std::vector<std::string> unlock_keys;
-    std::string              blinding_factor;
+    std::vector<Confidential> confidential;
+    std::vector<Open>         open;
+    std::vector<std::string>  unlock_keys;
+    std::string               blinding_factor;
 };
 
-static xRet from_Ret(Ret const &ret)
+static Confidential serialize_confidential(_Confidential const &c)
 {
-    xRet r;
-    r.tx_key          = to_hex(ret.T);
-    r.owner           = to_hex(ret.P);
-    r.blinding_factor = to_hex(ret.B);
-    r.commitment      = to_hex(ret.C);
-    r.data            = to_hex(ret.E);
-    r.signature       = to_hex(ret.S);
-    r.range_proof     = to_hex(ret.commitment_range_proof).substr(0, 2 * ret.proof_len);
+    Confidential r;
+    r.tx_key          = to_hex(c.T);
+    r.owner           = to_hex(c.P);
+    r.blinding_factor = to_hex(c.B);
+    r.commitment      = to_hex(c.C);
+    r.data            = to_hex(c.E);
+    r.signature       = to_hex(c.S);
+    r.range_proof     = to_hex(c.commitment_range_proof).substr(0, 2 * c.proof_len);
     return r;
 }
 
-confidential_tx transfer_from_confidential(
-    std::string        x_private_a,
-    std::string        x_private_b,
-    std::vector<xOpen> x_inputs,
-    std::string        x_to_address,
-    std::string        x_to_amount,
-    op_fee             fee)
+
+Confidential build_confidential_tx_(std::string A_p, std::string B_p, std::string value, std::string asset, bool generate_range_proof)
 {
-    int             ok = 1;
-    confidential_tx result;
+    _Confidential confidential;
+    memset(&confidential, 0, sizeof(_Confidential));
+
+    auto A = from_hex(A_p);
+    auto B = from_hex(B_p);
+
+    auto err = build_confidential_tx((unsigned char *) &confidential, A.data( ), B.data( ), xstr_to_u64(value), xstr_to_u64(asset), generate_range_proof);
+    if(err)
+        return {};
+
+    return serialize_confidential(confidential);
+}
+
+
+TX transfer_from_confidential(
+    std::string       x_private_a,
+    std::string       x_private_b,
+    std::vector<Open> x_inputs,
+    std::string       x_to_address,
+    std::string       x_to_amount,
+    Fee               fee)
+{
+    int ok = 1;
+    TX  result;
 
     private_key_ owner_private_a, owner_private_b;
     memcpy(owner_private_a.data, from_hex(x_private_a).data( ), sizeof(owner_private_a));
@@ -398,22 +376,22 @@ confidential_tx transfer_from_confidential(
 
     std::vector<blind_factor_> blinding_factors;
 
-    std::vector<out> beneficiaries;
-    uint64_t         total_amount_in = 0;
+    std::vector<Beneficiary> beneficiaries;
+    uint64_t                 total_amount_in = 0;
 
     uint64_t to_amount = xstr_to_u64(x_to_amount);
 
     for(auto &&in : x_inputs)
     {
         shared_secret_t shared_secret_b;
-        ok &= generate_shared_secret(shared_secret_b, to_pubkey(in.owner), owner_private_b.data);
+        ok &= generate_shared_secret(shared_secret_b, to_pubkey(in.pk), owner_private_b.data);
         blind_factor_ blind_factor_b;
         sha256(blind_factor_b.data, shared_secret_b, sizeof(shared_secret_b));
 
         blinding_factors.push_back(blind_factor_b);
 
         shared_secret_t shared_secret_a;
-        ok &= generate_shared_secret(shared_secret_a, to_pubkey(in.owner), owner_private_a.data);
+        ok &= generate_shared_secret(shared_secret_a, to_pubkey(in.pk), owner_private_a.data);
         blind_factor_ blind_factor_a;
         sha256(blind_factor_a.data, shared_secret_a, sizeof(shared_secret_a));
 
@@ -426,7 +404,7 @@ confidential_tx transfer_from_confidential(
 
     if(total_amount_in > to_amount + xstr_to_u64(fee.base_fee) + 2 * xstr_to_u64(fee.per_out))
     {
-        out              self;
+        Beneficiary      self;
         secp256k1_pubkey A, B;
         auto             sz = sizeof(public_key_t);
         ok &= secp256k1_ec_pubkey_create(ctx, &A, owner_private_a.data);
@@ -447,8 +425,8 @@ confidential_tx transfer_from_confidential(
         return {};
     }
     {
-        out  beneficiary;
-        auto to_address               = from_hex(x_to_address);
+        Beneficiary beneficiary;
+        auto        to_address        = from_hex(x_to_address);
         beneficiary.confidential_addr = to_address.size( ) > sizeof(public_key_t);
         memcpy(&beneficiary.A, to_address.data( ), sizeof(public_key_t));
         if(beneficiary.confidential_addr)
@@ -461,41 +439,41 @@ confidential_tx transfer_from_confidential(
 
 
     auto     inputs_blinds_n = blinding_factors.size( );
-    auto     ct_n            = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](out const &addr) { return addr.confidential_addr; });
+    auto     ct_n            = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](Beneficiary const &addr) { return addr.confidential_addr; });
     uint64_t symbol          = xstr_to_u64(fee.symbol);
 
     for(auto item : beneficiaries)
     {
-        Ret ret;
-        memset(&ret, 0, sizeofRet( ));
+        _Confidential _confidential;
+        memset(&_confidential, 0, sizeof(_Confidential));
 
         if(item.confidential_addr)
         {
-            ok &= not build_confidential_tx((unsigned char *) &ret, item.A.data, item.B.data, item.amount, symbol, ct_n > 1);
-            auto x_ret = from_Ret(ret);
-            result.confidential.push_back(x_ret);
+            ok &= not build_confidential_tx((unsigned char *) &_confidential, item.A.data, item.B.data, item.amount, symbol, ct_n > 1);
+            auto confidential = serialize_confidential(_confidential);
+            result.confidential.push_back(confidential);
             blind_factor_ b;
-            memcpy(b.data, ret.B, sizeof(b));
+            memcpy(b.data, _confidential.B, sizeof(b));
             blinding_factors.push_back(b);
         }
         else
         {
-            xOpen open;
-            open.owner  = to_hex(item.A.data);
+            Open open;
+            open.pk     = to_hex(item.A.data);
             open.amount = to_hex(item.amount);
             result.open.push_back(open);
         }
     }
     /** commitments must be in sorted order */
-    std::sort(result.confidential.begin( ), result.confidential.end( ), [&](const xRet &a, const xRet &b) {
+    std::sort(result.confidential.begin( ), result.confidential.end( ), [&](const Confidential &a, const Confidential &b) {
         return std::strcmp(a.commitment.c_str( ), b.commitment.c_str( )) < 0;
     });
 
-    blind_factor_ blind;
-    ok &= blinding_sum(blind.data, (blind_factor_t *) blinding_factors.data( ), blinding_factors.size( ), inputs_blinds_n);
+    blind_factor_ blind_tot;
+    ok &= blinding_sum(blind_tot.data, (blind_factor_t *) blinding_factors.data( ), blinding_factors.size( ), inputs_blinds_n);
 
 
-    result.blinding_factor = to_hex(blind.data);
+    result.blinding_factor = to_hex(blind_tot.data);
 
     return result;
 }
@@ -503,9 +481,9 @@ confidential_tx transfer_from_confidential(
 #ifndef __EMSCRIPTEN__
 int main( )
 {
-    auto               sk_a   = "6babf77576c6cb7d826aadd8e8ede226cdb0ef6e5354bc3727fdd5a037241297";
-    auto               sk_b   = "2f34e549de26c62551b842cf41abc823c2251fc7fe2088c226597bf5530a0894";
-    std::vector<xOpen> inputs = {
+    auto              sk_a   = "6babf77576c6cb7d826aadd8e8ede226cdb0ef6e5354bc3727fdd5a037241297";
+    auto              sk_b   = "2f34e549de26c62551b842cf41abc823c2251fc7fe2088c226597bf5530a0894";
+    std::vector<Open> inputs = {
         {"02731eddfd05bfe197c7a1045a9274365cfe801b2bec8cad62347668a41fbc40be", "00e1f50500000000"},
         {"021369a0e9d3677c722ead0f574960c2ab12a9a2fd9ccfa22e9bae0e27c75f1a7c", "00e1f50500000000"},
         {"020d1df59b6e5851497412b02e860d0307dfe7664bcca39358cd09148faf2b2384", "00e1f50500000000"},
@@ -528,37 +506,38 @@ int main( )
 
 using namespace emscripten;
 
-EMSCRIPTEN_BINDINGS(my_module)
+EMSCRIPTEN_BINDINGS(cryptojs)
 {
-    value_object<xRet>("xRet")
-        .field("tx_key", &xRet::tx_key)
-        .field("owner", &xRet::owner)
-        .field("blinding_factor", &xRet::blinding_factor)
-        .field("commitment", &xRet::commitment)
-        .field("data", &xRet::data)
-        .field("signature", &xRet::signature)
-        .field("range_proof", &xRet::range_proof);
+    value_object<Confidential>("Confidential")
+        .field("tx_key", &Confidential::tx_key)
+        .field("owner", &Confidential::owner)
+        .field("blinding_factor", &Confidential::blinding_factor)
+        .field("commitment", &Confidential::commitment)
+        .field("data", &Confidential::data)
+        .field("signature", &Confidential::signature)
+        .field("range_proof", &Confidential::range_proof);
 
-    value_object<xOpen>("xOpen")
-        .field("owner", &xOpen::owner)
-        .field("amount", &xOpen::amount);
+    value_object<Open>("Open")
+        .field("pk", &Open::pk)
+        .field("amount", &Open::amount);
 
-    value_object<op_fee>("op_fee")
-        .field("base_fee", &op_fee::base_fee)
-        .field("per_out", &op_fee::per_out)
-        .field("symbol", &op_fee::symbol);
+    value_object<Fee>("Fee")
+        .field("base_fee", &Fee::base_fee)
+        .field("per_out", &Fee::per_out)
+        .field("symbol", &Fee::symbol);
 
-    register_vector<xRet>("vector<xRet>");
-    register_vector<xOpen>("vector<xOpen>");
+    value_object<TX>("TX")
+        .field("blinding_factor", &TX::blinding_factor)
+        .field("confidential", &TX::confidential)
+        .field("open", &TX::open)
+        .field("unlock_keys", &TX::unlock_keys);
 
-    value_object<confidential_tx>("confidential_tx")
-        .field("blinding_factor", &confidential_tx::blinding_factor)
-        .field("confidential", &confidential_tx::confidential)
-        .field("open", &confidential_tx::open)
-        .field("unlock_keys", &confidential_tx::unlock_keys);
-    register_vector<confidential_tx>("vector<confidential_tx>");
-
+    register_vector<TX>("vector<TX>");
+    register_vector<Confidential>("vector<Confidential>");
+    register_vector<Open>("vector<Open>");
     register_vector<std::string>("vector<string>");
+
     function("transfer_from_confidential", &transfer_from_confidential);
+    function("build_confidential_tx_", &build_confidential_tx_);
 };
 #endif

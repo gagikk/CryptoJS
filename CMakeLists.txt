@@ -69,7 +69,7 @@ add_dependencies(cryptopp project_cryptopp)
 if(JS)
     add_executable(cryptojs "main.cpp")
     # -s MODULARIZE=1 -s EXPORT_NAME='CryptoJS'
-    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "--bind -O3 -s ENVIRONMENT=web -s WASM=1 -s BINARYEN_METHOD='native-wasm' -s EXPORTED_FUNCTIONS='[_build_confidential_tx, _sizeofRet, _blinding_sum, _sha256, _aes_decrypt, _generate_shared_secret]' -s EXTRA_EXPORTED_RUNTIME_METHODS='[cwrap, ccall, setValue]'")
+    set_target_properties(cryptojs PROPERTIES LINK_FLAGS "--bind -O3 -s ENVIRONMENT=web -s WASM=1 -s BINARYEN_METHOD='native-wasm'")
     set_target_properties(
         cryptojs
         PROPERTIES
