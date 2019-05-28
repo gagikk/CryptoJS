@@ -248,15 +248,6 @@ static std::vector<unsigned char> from_hex(std::string const &x_str)
     return {};
 }
 
-static uint64_t xstr_to_u64(std::string const &x_str)
-{
-    uint64_t result = 0;
-    auto     v      = from_hex(x_str);
-    if(v.size( ) == sizeof(uint64_t))
-        memcpy(&result, v.data( ), v.size( ));
-    return result;
-}
-
 template<typename T, size_t N>
 std::string to_hex(T const (&data)[N])
 {
@@ -271,14 +262,6 @@ std::string to_hex(T const (&data)[N])
         return result;
     }
     return {};
-}
-
-template<typename T>
-std::string to_hex(T const &data)
-{
-    uint8_t _data[sizeof(T)];
-    memcpy(_data, &data, sizeof(T));
-    return to_hex(_data);
 }
 
 struct Beneficiary
@@ -335,7 +318,6 @@ static Confidential serialize_confidential(_Confidential const &c)
     return r;
 }
 
-
 Confidential build_confidential_tx_(std::string A_p, std::string B_p, std::string value, std::string asset, bool generate_range_proof)
 {
     _Confidential confidential;
@@ -344,7 +326,7 @@ Confidential build_confidential_tx_(std::string A_p, std::string B_p, std::strin
     auto A = from_hex(A_p);
     auto B = from_hex(B_p);
 
-    auto err = build_confidential_tx((unsigned char *) &confidential, A.data( ), B.data( ), xstr_to_u64(value), xstr_to_u64(asset), generate_range_proof);
+    auto err = build_confidential_tx((unsigned char *) &confidential, A.data( ), B.data( ), std::stoull(value), std::stoull(asset), generate_range_proof);
     if(err)
         return {};
 
@@ -357,7 +339,7 @@ TX transfer_from_confidential(
     std::string       x_private_b,
     std::vector<Open> x_inputs,
     std::string       x_to_address,
-    std::string       x_to_amount,
+    std::string       to_amount_str,
     Fee               fee)
 {
     int ok = 1;
@@ -379,7 +361,7 @@ TX transfer_from_confidential(
     std::vector<Beneficiary> beneficiaries;
     uint64_t                 total_amount_in = 0;
 
-    uint64_t to_amount = xstr_to_u64(x_to_amount);
+    uint64_t to_amount = std::stoull(to_amount_str);
 
     for(auto &&in : x_inputs)
     {
@@ -399,10 +381,10 @@ TX transfer_from_confidential(
         ok &= secp256k1_ec_privkey_tweak_add(ctx, unlock_key.data, blind_factor_a.data);
         result.unlock_keys.push_back(to_hex(unlock_key.data));
 
-        total_amount_in += xstr_to_u64(in.amount);
+        total_amount_in += std::stoull(in.amount);
     }
 
-    if(total_amount_in > to_amount + xstr_to_u64(fee.base_fee) + 2 * xstr_to_u64(fee.per_out))
+    if(total_amount_in > to_amount + std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out))
     {
         Beneficiary      self;
         secp256k1_pubkey A, B;
@@ -413,11 +395,11 @@ TX transfer_from_confidential(
         ok &= secp256k1_ec_pubkey_serialize(ctx, self.B.data, &sz, &B, SECP256K1_EC_COMPRESSED);
         self.confidential_addr = true;
 
-        auto _change = total_amount_in - to_amount - (xstr_to_u64(fee.base_fee) + 2 * xstr_to_u64(fee.per_out));
+        auto _change = total_amount_in - to_amount - (std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out));
         self.amount  = _change;
         beneficiaries.push_back(self);
     }
-    else if(total_amount_in == to_amount + xstr_to_u64(fee.base_fee) + xstr_to_u64(fee.per_out))
+    else if(total_amount_in == to_amount + std::stoull(fee.base_fee) + std::stoull(fee.per_out))
     {
     }
     else
@@ -440,7 +422,7 @@ TX transfer_from_confidential(
 
     auto     inputs_blinds_n = blinding_factors.size( );
     auto     ct_n            = std::count_if(beneficiaries.begin( ), beneficiaries.end( ), [](Beneficiary const &addr) { return addr.confidential_addr; });
-    uint64_t symbol          = xstr_to_u64(fee.symbol);
+    uint64_t symbol          = std::stoull(fee.symbol);
 
     for(auto item : beneficiaries)
     {
@@ -460,7 +442,7 @@ TX transfer_from_confidential(
         {
             Open open;
             open.pk     = to_hex(item.A.data);
-            open.amount = to_hex(item.amount);
+            open.amount = std::to_string(item.amount);
             result.open.push_back(open);
         }
     }
