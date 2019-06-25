@@ -96,6 +96,17 @@ static secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_VERIF
 static CryptoPP::SHA512   _sha512;
 static CryptoPP::SHA256   _sha256;
 
+static void sha512(shared_secret_t ret, unsigned char *data, uint32_t sz)
+{
+    _sha512.CalculateDigest(ret, data, sz);
+}
+
+
+static void sha256(unsigned char ret[32], unsigned char *data, uint32_t sz)
+{
+    _sha256.CalculateDigest(ret, data, sz);
+}
+
 static int generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubkey pk, private_key_t sk)
 {
     int          ok = 1;
@@ -104,15 +115,11 @@ static int generate_shared_secret(shared_secret_t shared_secret, secp256k1_pubke
     ok &= secp256k1_ec_pubkey_tweak_mul(ctx, &pk, sk);
     ok &= secp256k1_ec_pubkey_serialize(ctx, _pk, &sz, &pk, SECP256K1_EC_COMPRESSED);
 
-    _sha512.CalculateDigest(shared_secret, &_pk[1], PK_SZ - 1);
+    sha512(shared_secret, &_pk[1], PK_SZ - 1);
 
     return ok;
 }
 
-static void sha256(unsigned char ret[32], unsigned char *data, uint32_t sz)
-{
-    _sha256.CalculateDigest(ret, data, sz);
-}
 
 static int blind(commitment_t commitment, blind_factor_t const blind_factor, uint64_t const value)
 {
@@ -203,6 +210,45 @@ std::string to_hex(T const (&data)[N])
     return {};
 }
 
+std::string aes_encrypt(std::string plain_data, shared_secret_t secret, bool add_checksum = false)
+{
+    std::string encrypted_data;
+    CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption aes;
+    aes.SetKeyWithIV(secret, 32, &secret[32]);
+
+    if(add_checksum)
+    {
+        char ret[32];
+        sha256((unsigned char *)ret, (unsigned char *)plain_data.data(), plain_data.size());
+        plain_data = std::string(ret, 4) + plain_data;
+    }
+
+    CryptoPP::StringSource(plain_data, true, new CryptoPP::StreamTransformationFilter(aes, new CryptoPP::StringSink(encrypted_data)));
+
+    return encrypted_data;
+}
+
+std::string aes_decrypt(std::string encrypted_data, shared_secret_t secret, bool check_checksum = false)
+{
+    std::string plain_data;
+    CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption aes;
+    aes.SetKeyWithIV(secret, 32, &secret[32]);
+    CryptoPP::StringSource(encrypted_data, true, new CryptoPP::StreamTransformationFilter(aes, new CryptoPP::StringSink(plain_data)));
+    if(check_checksum)
+    {
+        auto check_str = plain_data.substr(0, 4);
+        plain_data = plain_data.substr(4);
+        char ret[32];
+        sha256((unsigned char *)ret, (unsigned char *)plain_data.data(), plain_data.size());
+        if(0 == memcmp(plain_data.data(), ret, 4))
+            return plain_data;
+        return "";
+    }
+
+    return plain_data;
+}
+
+
 Confidential build_confidential_tx(std::string A_p, std::string B_p, std::string value_str, std::string asset_str, std::string msg, bool generate_range_proof)
 {
     int ok = 1;
@@ -253,31 +299,8 @@ Confidential build_confidential_tx(std::string A_p, std::string B_p, std::string
     shared_secret_t shared_secret_b;
     ok &= generate_shared_secret(shared_secret_b, _B_p, tx_key_s);
 
-
-    CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption aes;
-    aes.SetKeyWithIV(shared_secret_b, 32, &shared_secret_b[32]);
-
-    CryptoPP::byte encrypted_data[CryptoPP::AES::BLOCKSIZE];
-    CryptoPP::byte plain_data[CryptoPP::AES::BLOCKSIZE];
-    memset(plain_data, CryptoPP::AES::BLOCKSIZE - sizeof(value), sizeof(plain_data));
-    memcpy(plain_data, &value, sizeof(value));
-    aes.ProcessData(encrypted_data, plain_data, sizeof(plain_data));
-
-
-    std::string msg_cypher;
-
-    if(not msg.empty( ))
-    {
-        if(msg.size( ) > 160)
-            msg.resize(160);
-
-        auto pad = CryptoPP::AES::BLOCKSIZE - msg.size( ) % CryptoPP::AES::BLOCKSIZE;
-        msg.resize(msg.size( ) + pad, pad == CryptoPP::AES::BLOCKSIZE ? 0 : pad);
-
-        msg_cypher.resize('\0', msg.size( ));
-        aes.ProcessData((CryptoPP::byte *) &msg_cypher[0], (CryptoPP::byte *) msg.data( ), msg.size( ));
-    }
-
+    std::string plain_data((char*)&value, sizeof(value));
+    auto encrypted_data = aes_encrypt(plain_data, shared_secret_b, false);
 
     blind_factor_t amount_blind;
     sha256(amount_blind, shared_secret_b, sizeof(shared_secret_b));
@@ -292,12 +315,28 @@ Confidential build_confidential_tx(std::string A_p, std::string B_p, std::string
         ok &= range_proof_sign(commitment_range_proof, &proof_len, 0, commitment, amount_blind, nonce, 0, 0, value);
 
 
+    std::string msg_cypher;
+    if(not msg.empty( ))
+    {
+        if(msg.size( ) > 224)
+            msg.resize(224);
+
+        uint64_t nonce = 0;
+        memcpy(&nonce, encrypted_data.data(), sizeof(nonce));
+        shared_secret_t secret;
+        auto _secret = std::to_string(nonce) + std::string((char*)shared_secret_b, sizeof (shared_secret_t));
+        sha512(secret, (unsigned char*)_secret.data(), _secret.size());
+
+        msg_cypher = aes_encrypt(msg, secret, true);
+    }
+
+
     Confidential r;
     r.tx_key          = to_hex(tx_key_p);
     r.owner           = to_hex(P_p);
     r.blinding_factor = to_hex(amount_blind);
     r.commitment      = to_hex(commitment);
-    r.data            = to_hex(encrypted_data);
+    CryptoPP::StringSource(encrypted_data, true, new CryptoPP::HexEncoder(new CryptoPP::StringSink(r.data), false));
     r.range_proof     = to_hex(commitment_range_proof).substr(0, 2 * proof_len);
     CryptoPP::StringSource(msg_cypher, true, new CryptoPP::HexEncoder(new CryptoPP::StringSink(r.msg), false));
 
@@ -323,6 +362,7 @@ TX transfer_from_confidential(
     std::vector<Open> x_inputs,
     std::string       x_to_address,
     std::string       to_amount_str,
+    std::string       message,
     Fee               fee)
 {
     int ok = 1;
@@ -410,7 +450,7 @@ TX transfer_from_confidential(
     {
         if(item.confidential_addr)
         {
-            auto confidential = build_confidential_tx(to_hex(item.A.data), to_hex(item.B.data), std::to_string(item.amount), fee.symbol, "", ct_n > 1);
+            auto confidential = build_confidential_tx(to_hex(item.A.data), to_hex(item.B.data), std::to_string(item.amount), fee.symbol, message, ct_n > 1);
             result.confidential.push_back(confidential);
 
             blind_factor_ b;
@@ -419,10 +459,54 @@ TX transfer_from_confidential(
         }
         else
         {
-            Open open;
-            open.pk     = to_hex(item.A.data);
-            open.amount = std::to_string(item.amount);
-            result.open.push_back(open);
+            Confidential out;
+
+            out.commitment = to_hex(public_key_( ).data);
+            out.owner      = to_hex(item.A.data);
+
+
+            CryptoPP::AutoSeededRandomPool rng;
+
+            size_t           sz = PK_SZ;
+            secp256k1_pubkey _tx_key_p;
+            private_key_t    tx_key_s;
+            public_key_t     tx_key_p;
+
+            rng.GenerateBlock(tx_key_s, sizeof(tx_key_s));
+
+            ok &= secp256k1_ec_pubkey_create(ctx, &_tx_key_p, tx_key_s);
+            ok &= secp256k1_ec_pubkey_serialize(ctx, tx_key_p, &sz, &_tx_key_p, SECP256K1_EC_COMPRESSED);
+
+            out.tx_key = to_hex(tx_key_p);
+
+            char data[16];
+            memcpy(&data[0], &item.amount, 8);
+            auto unit = std::stoull(fee.symbol);
+            memcpy(&data[8], &unit, 8);
+            out.data = to_hex(data);
+
+
+            std::string msg_cypher;
+            if(not message.empty( ))
+            {
+                if(message.size( ) > 224)
+                    message.resize(224);
+
+                uint64_t nonce = 0;
+                memcpy(&nonce, data, sizeof(nonce));
+                shared_secret_t secret, shared_secret;
+                secp256k1_pubkey pk;
+                ok &= secp256k1_ec_pubkey_parse(ctx, &pk, item.A.data, PK_SZ);
+                generate_shared_secret(shared_secret, pk, tx_key_s);
+
+                auto _secret = std::to_string(nonce) + std::string((char*)shared_secret, sizeof (shared_secret_t));
+                sha512(secret, (unsigned char*)_secret.data(), _secret.size());
+
+                auto msg_cypher = aes_encrypt(message, secret, true);
+                CryptoPP::StringSource(msg_cypher, true, new CryptoPP::HexEncoder(new CryptoPP::StringSink(out.msg), false));
+            }
+
+            result.confidential.push_back(out);
         }
     }
     /** commitments must be in sorted order */
