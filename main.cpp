@@ -85,7 +85,6 @@ struct Open
 struct TX
 {
     std::vector<Confidential> confidential;
-    std::vector<Open>         open;
     std::vector<std::string>  unlock_keys;
     std::string               blinding_factor;
     std::string               fee;
@@ -503,7 +502,6 @@ TX transfer_from_confidential(
             memcpy(&data[8], &unit, 8);
             out.data = to_hex(data);
 
-
             std::string msg_cypher;
             if(not message.empty( ))
             {
@@ -570,7 +568,6 @@ EMSCRIPTEN_BINDINGS(cryptojs)
     value_object<TX>("TX")
         .field("blinding_factor", &TX::blinding_factor)
         .field("confidential", &TX::confidential)
-        .field("open", &TX::open)
         .field("unlock_keys", &TX::unlock_keys)
         .field("fee", &TX::fee);
 
