@@ -249,13 +249,27 @@ std::string aes_decrypt(std::string encrypted_data, shared_secret_t secret, bool
     return plain_data;
 }
 
+static uint64_t str_to_u64(std::string str)
+{
+    uint64_t res = 0, e = 1;
+    for( auto it = str.rbegin(); it != str.rend(); ++it)
+    {
+        char c[1];
+        c[0] = *it;
+        res += e * std::atoi(c);
+        e *= 10;
+    }
+
+    return res;
+}
+
 
 Confidential build_confidential_tx(std::string A_p, std::string B_p, std::string value_str, std::string asset_str, std::string msg, bool generate_range_proof)
 {
     int ok = 1;
 
-    auto value = std::stoull(value_str);
-    auto asset = std::stoull(asset_str);
+    auto value = str_to_u64(value_str);
+    auto asset = str_to_u64(asset_str);
 
     if(not asset)
         return {};
@@ -385,7 +399,7 @@ TX transfer_from_confidential(
     std::vector<Beneficiary> beneficiaries;
     uint64_t                 total_amount_in = 0;
 
-    uint64_t to_amount = std::stoull(to_amount_str);
+    uint64_t to_amount = str_to_u64(to_amount_str);
 
     for(auto &&in : x_inputs)
     {
@@ -405,10 +419,10 @@ TX transfer_from_confidential(
         ok &= secp256k1_ec_privkey_tweak_add(ctx, unlock_key.data, blind_factor_a.data);
         result.unlock_keys.push_back(to_hex(unlock_key.data));
 
-        total_amount_in += std::stoull(in.amount);
+        total_amount_in += str_to_u64(in.amount);
     }
 
-    if(total_amount_in > to_amount + std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out))
+    if(total_amount_in > to_amount + str_to_u64(fee.base_fee) + 2 * str_to_u64(fee.per_out))
     {
         Beneficiary      self;
         secp256k1_pubkey A, B;
@@ -419,15 +433,15 @@ TX transfer_from_confidential(
         ok &= secp256k1_ec_pubkey_serialize(ctx, self.B.data, &sz, &B, SECP256K1_EC_COMPRESSED);
         self.confidential_addr = true;
 
-        auto _change = total_amount_in - to_amount - (std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out));
+        auto _change = total_amount_in - to_amount - (str_to_u64(fee.base_fee) + 2 * str_to_u64(fee.per_out));
         self.amount  = _change;
         beneficiaries.push_back(self);
 
-        result.fee = std::to_string(std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out));
+        result.fee = std::to_string(str_to_u64(fee.base_fee) + 2 * str_to_u64(fee.per_out));
     }
-    else if(total_amount_in == to_amount + std::stoull(fee.base_fee) + std::stoull(fee.per_out))
+    else if(total_amount_in == to_amount + str_to_u64(fee.base_fee) + str_to_u64(fee.per_out))
     {
-        result.fee = std::to_string(std::stoull(fee.base_fee) + std::stoull(fee.per_out));
+        result.fee = std::to_string(str_to_u64(fee.base_fee) + str_to_u64(fee.per_out));
         // DO NOTHING
     }
     else
@@ -485,7 +499,7 @@ TX transfer_from_confidential(
 
             char data[16];
             memcpy(&data[0], &item.amount, 8);
-            auto unit = std::stoull(fee.symbol);
+            auto unit = str_to_u64(fee.symbol);
             memcpy(&data[8], &unit, 8);
             out.data = to_hex(data);
 
