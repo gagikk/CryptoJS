@@ -88,6 +88,7 @@ struct TX
     std::vector<Open>         open;
     std::vector<std::string>  unlock_keys;
     std::string               blinding_factor;
+    std::string               fee;
 };
 
 
@@ -362,8 +363,8 @@ TX transfer_from_confidential(
     std::vector<Open> x_inputs,
     std::string       x_to_address,
     std::string       to_amount_str,
-    std::string       message,
-    Fee               fee)
+    Fee               fee,
+    std::string       message)
 {
     int ok = 1;
     TX  result;
@@ -421,9 +422,12 @@ TX transfer_from_confidential(
         auto _change = total_amount_in - to_amount - (std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out));
         self.amount  = _change;
         beneficiaries.push_back(self);
+
+        result.fee = std::to_string(std::stoull(fee.base_fee) + 2 * std::stoull(fee.per_out));
     }
     else if(total_amount_in == to_amount + std::stoull(fee.base_fee) + std::stoull(fee.per_out))
     {
+        result.fee = std::to_string(std::stoull(fee.base_fee) + std::stoull(fee.per_out));
         // DO NOTHING
     }
     else
@@ -553,7 +557,8 @@ EMSCRIPTEN_BINDINGS(cryptojs)
         .field("blinding_factor", &TX::blinding_factor)
         .field("confidential", &TX::confidential)
         .field("open", &TX::open)
-        .field("unlock_keys", &TX::unlock_keys);
+        .field("unlock_keys", &TX::unlock_keys)
+        .field("fee", &TX::fee);
 
     register_vector<TX>("vector<TX>");
     register_vector<Confidential>("vector<Confidential>");
