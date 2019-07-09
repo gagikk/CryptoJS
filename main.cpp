@@ -338,7 +338,8 @@ Confidential build_confidential_tx(std::string A_p, std::string B_p, std::string
         uint64_t nonce = 0;
         memcpy(&nonce, encrypted_data.data(), sizeof(nonce));
         shared_secret_t secret;
-        auto _secret = std::to_string(nonce) + std::string((char*)shared_secret_b, sizeof (shared_secret_t));
+        auto shared_secret_x = to_hex(shared_secret_b);
+        auto _secret = std::to_string(nonce) + shared_secret_x;
         sha512(secret, (unsigned char*)_secret.data(), _secret.size());
 
         msg_cypher = aes_encrypt(msg, secret, true);
@@ -515,7 +516,8 @@ TX transfer_from_confidential(
                 ok &= secp256k1_ec_pubkey_parse(ctx, &pk, item.A.data, PK_SZ);
                 generate_shared_secret(shared_secret, pk, tx_key_s);
 
-                auto _secret = std::to_string(nonce) + std::string((char*)shared_secret, sizeof (shared_secret_t));
+                auto shared_secret_x = to_hex(shared_secret);
+                auto _secret = std::to_string(nonce) + shared_secret_x;
                 sha512(secret, (unsigned char*)_secret.data(), _secret.size());
 
                 auto msg_cypher = aes_encrypt(message, secret, true);
